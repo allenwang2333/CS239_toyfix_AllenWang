@@ -51,11 +51,25 @@ class ChatClient:
 class DeepSeekClient(ChatClient):
     def __init__(self, model: str | None = None, base_url: str | None = None,
                  api_key: str | None = None, timeout: int = 300, max_retries: int = 4):
-        self.model = model or os.environ.get("TOYFIX_MODEL", DEFAULT_MODEL)
-        self.base_url = (base_url or os.environ.get("TOYFIX_BASE_URL", DEFAULT_BASE_URL)).rstrip("/")
+        raw_url = (base_url or os.environ.get("TOYFIX_BASE_URL", DEFAULT_BASE_URL)).rstrip("/")
+        if not raw_url.endswith("/v1") and ("localhost" in raw_url or "127.0.0.1" in raw_url or raw_url.startswith("http://")):
+            raw_url = f"{raw_url}/v1"
+        self.base_url = raw_url
+        model_name = model or os.environ.get("TOYFIX_MODEL")
+        if not model_name:
+            if "localhost" in self.base_url or "127.0.0.1" in self.base_url:
+                model_name = "Qwen/Qwen3.8-27B"
+            else:
+                model_name = DEFAULT_MODEL
+        if model_name.lower() in ("qwen", "qwen3.8", "qwen3.8-27b", "qwen-27b", "qwen/qwen3.8-27b"):
+            model_name = "Qwen/Qwen3.8-27B"
+        self.model = model_name
         self.api_key = api_key or os.environ.get("TOYFIX_API_KEY") or os.environ.get("DEEPSEEK_API_KEY")
         if not self.api_key:
-            raise LLMError("set DEEPSEEK_API_KEY (or TOYFIX_API_KEY) in the environment or .env")
+            if "localhost" in self.base_url or "127.0.0.1" in self.base_url:
+                self.api_key = "local"
+            else:
+                raise LLMError("set DEEPSEEK_API_KEY (or TOYFIX_API_KEY) in the environment or .env")
         self.timeout = timeout
         self.max_retries = max_retries
 
@@ -89,7 +103,7 @@ class DeepSeekClient(ChatClient):
                 raise LLMError(f"request failed: {e}") from None
         msg = payload["choices"][0]["message"]
         return Reply(content=msg.get("content") or "", tool_calls=msg.get("tool_calls") or [],
-                     reasoning=msg.get("reasoning_content") or "",
+                     reasoning=msg.get("reasoning_content") or msg.get("reasoning") or "",
                      usage=payload.get("usage") or {})
 
 

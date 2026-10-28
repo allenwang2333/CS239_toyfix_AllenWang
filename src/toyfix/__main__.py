@@ -56,7 +56,7 @@ def _flags(args) -> Flags:
 
 def _clients(args) -> dict:
     load_dotenv(Path(__file__).resolve().parent)
-    return {"default": DeepSeekClient(model=args.model)}
+    return {"default": DeepSeekClient(model=args.model, base_url=getattr(args, "base_url", None))}
 
 
 def cmd_episode(args) -> None:
@@ -142,6 +142,7 @@ def main() -> None:
             p.add_argument("--modes", default="multi")
             p.add_argument("--jobs", type=int, default=4)
         p.add_argument("--model", default=None, help="default: $TOYFIX_MODEL or deepseek-flash")
+        p.add_argument("--base-url", default=None, help="default: $TOYFIX_BASE_URL")
         p.add_argument("--attempts", type=int, default=4)
         p.add_argument("--no-oracle", action="store_true")
         p.add_argument("--no-corpus-feedback", action="store_true")

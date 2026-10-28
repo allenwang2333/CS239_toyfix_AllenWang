@@ -160,6 +160,8 @@ def make_workspace(dest: Path, fault: Fault | None) -> None:
     """Copy the clean toolchain to dest and inject the fault."""
     if dest.exists():
         shutil.rmtree(dest)
-    shutil.copytree(SUT_DIR, dest, ignore=shutil.ignore_patterns("__pycache__", ".scratch"))
+    shutil.copytree(SUT_DIR, dest,
+                    ignore=shutil.ignore_patterns("__pycache__", ".scratch", ".#*", "*~"),
+                    ignore_dangling_symlinks=True)
     if fault is not None:
         apply_fault(dest, fault)

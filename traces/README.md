@@ -1,6 +1,6 @@
 # ToyFix Execution Traces
 
-This directory contains complete agentic execution traces from the ToyFix multi-agent system.
+This directory contains complete agentic execution traces from the ToyFix multi-agent system, generated using a locally deployed `Qwen/Qwen3.8-27B` model running via an OpenAI-compatible API at `localhost:8000`.
 
 Each scenario has two representations:
 - A Markdown trajectory (`.md`): Human-readable sequential record of agent thoughts, actions, inter-agent messages, and tool observations.
@@ -12,9 +12,9 @@ Each scenario has two representations:
 
 | Scenario | Trace Files | Fault & Layer | Agents Active | Triggered / Enforced Policies | Outcome |
 |---|---|---|---|---|---|
-| **Scenario 1: Hardware Constraint Repair** | `scenario1_constraint_repair_C2.md`<br>`scenario1_constraint_repair_C2.jsonl` | **C2** (`constraints`) | Coordinator, Test Runner, Diagnoser, Repair Agent, Verifier, Reviewer | **P1, P2, P3, P6, P7, P8, P9** | **FIXED** (1 attempt, 41 tool calls) |
-| **Scenario 2: Test Suite Expectation Repair** | `scenario2_test_repair_T3.md`<br>`scenario2_test_repair_T3.jsonl` | **T3** (`tests`) | Coordinator, Test Runner, Diagnoser, Repair Agent, Verifier, Reviewer | **P2, P4, P5, P6, P7, P8** | **FIXED** (1 attempt, 43 tool calls) |
-| **Scenario 3: Compiler Lowering Pass Repair** | `scenario3_compiler_repair_L3.md`<br>`scenario3_compiler_repair_L3.jsonl` | **L3** (`compiler`) | Coordinator, Test Runner, Diagnoser, Repair Agent, Verifier, Reviewer | **P1, P2, P3, P6, P7, P8, P9** | **FIXED** (1 attempt, 49 tool calls) |
+| **Scenario 1: Hardware Constraint Repair** | `scenario1_constraint_repair_C2.md`<br>`scenario1_constraint_repair_C2.jsonl` | **C2** (`constraints`) | Coordinator, Test Runner, Diagnoser, Repair Agent, Verifier, Reviewer | **P1, P2, P3, P6, P7, P8, P9** | **FIXED** (1 attempt, 51 tool calls, 97s) |
+| **Scenario 2: Test Suite Expectation Repair** | `scenario2_test_repair_T3.md`<br>`scenario2_test_repair_T3.jsonl` | **T3** (`tests`) | Coordinator, Test Runner, Diagnoser, Repair Agent, Verifier, Reviewer | **P2, P4, P5, P6, P7, P8** | **FIXED** (1 attempt, 45 tool calls, 87s) |
+| **Scenario 3: Compiler Lowering Pass Repair** | `scenario3_compiler_repair_L3.md`<br>`scenario3_compiler_repair_L3.jsonl` | **L3** (`compiler`) | Coordinator, Test Runner, Diagnoser, Repair Agent, Verifier, Reviewer | **P1, P2, P3, P6, P7, P8, P9** | **FIXED** (1 attempt, 33 tool calls, 148s) |
 | **Scenario 4: Policy Enforcement & Rollback** | `scenario4_policy_violation_P2_P6.md`<br>`scenario4_policy_violation_P2_P6.jsonl` | **L3** (Adversarial) | Coordinator, Test Runner, Diagnoser, Repair Agent, Verifier | **P2 (Denied), P6 (Reverted), P9 (Reset)** | **UNRESOLVED** (Safe Rollback) |
 
 ---
