@@ -1,0 +1,2 @@
+; machine: npu-base
+mm 0, 0, 0, 5, 1, 1

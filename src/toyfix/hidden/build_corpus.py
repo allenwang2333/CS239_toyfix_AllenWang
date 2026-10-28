@@ -1,9 +1,9 @@
 """Build the hidden corpus that the Verifier uses (policy P6, P7).
 
 valid/   programs that every correct toolchain must accept and run correctly.
-invalid/ programs that the validator must reject (expected "<rejected>").
+invalid/ programs that a validator must reject (expected "<rejected>").
 
-MiniLang expected results come from the reference interpreter. Assembly
+MiniLang expected results come from the reference interpreter. NPU assembly
 expected results are written by hand from the spec.
 
 Run: python3 -m toyfix.hidden.build_corpus   (from src/)
@@ -19,359 +19,286 @@ OUT = HERE / "corpus"
 
 
 def ml(machine: str, body: str) -> str:
-    return f"// machine: {machine}\n{body.strip()}\n"
+    return f"# machine: {machine}\n{body.strip()}\n"
 
 
-def asm(machine: str, body: str) -> str:
+def npu(machine: str, body: str) -> str:
     return f"; machine: {machine}\n{body.strip()}\n"
 
 
-def nops(n: int) -> str:
-    return "\n".join("  addi r0, r0, 0" for _ in range(n))
-
-
 VALID_ML = {
-    "const_edges": ml("t32-base", """
-print 2048; print 6144; print -2048; print -4096; print 4095; print 4096;
-print 2147481600; print -2147483648; print 1048576; print 3221225472;
+    "mlp_tiny": ml("npu-tiny", """
+def dense(x: Tensor[3, 5, i32], w: Tensor[5, 3, i32], b: Tensor[3, i32]) -> Tensor[3, 3, i32]:
+    return relu(x @ w + b)
+
+def main():
+    x = iota((3, 5)) - 6
+    w1 = tensor([[1, -2, 0], [2, 1, -1], [0, 3, 1], [-1, 0, 2], [1, 1, 1]])
+    h = dense(x, w1, tensor([1, -2, 3]))
+    print(h)
+    print(h @ tensor([[2, -1], [0, 1], [1, 3]]) + tensor([-5, 5]))
 """),
-    "const_tiny": ml("t32-tiny", """
-var a = 2048; var b = 3000; var c = -70000;
-print a; print b; print c; print a + b + c; print 1000000007;
+    "mlp_wide": ml("npu-wide", """
+def main():
+    x = iota((6, 12)) - 30
+    w = iota((12, 10)) * 3 - 170
+    b = iota(10) * 100 - 450
+    h = relu(x @ w + b)
+    print(h)
+    print(h @ iota((10, 3)))
 """),
-    "const_wide": ml("t32-wide", """
-print 32767; print 32768; print -32768; print -32769; print 100000; print 34816;
+    "edge_base": ml("npu-base", """
+def main():
+    a = iota((5, 7)) - 17
+    b = iota((7, 6)) * 2 - 41
+    print(a @ b)
+    print(a * 3 + iota((5, 7)))
 """),
-    "div_mix": ml("t32-base", """
-var m = -2147483648;
-print m / -1; print m % -1; print 100 / 7; print -100 / 7; print 100 % -7;
-print -1 / 2; print 1 / -2; print -9 % 3; print 9 / 9;
+    "matmul_k_tiny": ml("npu-tiny", """
+def main():
+    a = tensor([[1, 2, 3, 4, 5, 6, 7]])
+    b = tensor([[1], [-1], [2], [-2], [3], [-3], [4]])
+    print(a @ b)
+    print(b @ a)
 """),
-    "div_tiny": ml("t32-tiny", """
-var x = -45; print x / 4; print x % 4; print x / -4; print 45 % -4;
+    "large_matmul": ml("npu-base", """
+def main():
+    a = iota((16, 16)) - 100
+    b = iota((16, 16)) * -1 + 128
+    print(a @ b)
 """),
-    "div_zero": ml("t32-base", """
-var z = 0; print 5; print 1 / z; print 6;
+    "transpose_mix": ml("npu-tiny", """
+def main():
+    x = tensor([[1, -2, 3, 4, 0], [5, 6, -7, 8, 1], [2, 0, 1, -1, 3]])
+    print(x.T @ x)
+    print((x * 2 + tensor([1, 2, 3, 4, 5])).T)
+    print(transpose(x @ x.T - 1))
 """),
-    "shift_mix": ml("t32-base", """
-var n = -1000; print n >> 3; print n >> 31; print n >> 32; print n << 4;
-print 7 << 28; print 2147483647 >> 30; print -2147483648 >> 1;
+    "transpose_wide": ml("npu-wide", """
+def main():
+    a = iota((3, 11)) - 9
+    print(a.T)
+    print(a.T @ a - transpose(a).T.T @ a)
+    print(a @ a.T)
 """),
-    "deep_base": ml("t32-base", """
-var a = 3;
-print a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+1))))))))))))))))));
-print ((1-(2-(3-(4-(5-(6-(7-(8-(9-(10-(11-(12-(13-(14-(15-(16-17))))))))))))))))) * 2;
+    "broadcast_rect": ml("npu-base", """
+def main():
+    m = iota((3, 6)) - 4
+    v = tensor([10, -20, 30, -40, 50, -60])
+    print(m + v)
+    print(v - m)
+    print(m * v + 1)
 """),
-    "deep_tiny": ml("t32-tiny", """
-array v[4];
-v[0] = 5; v[1] = -6; v[2] = 7; v[3] = 9;
-var k = 2;
-print v[0] + (v[1] * (v[2] - (v[3] + (k * (k + (k - (1 + (2 + 3))))))));
-print (k == (2 + (0 * (1 + (2 + (3 + (4 + 5))))))) + (k < (1 + (1 + (1 + (1 + 1)))));
+    "broadcast_tiny": ml("npu-tiny", """
+def main():
+    m = iota((5, 3))
+    b = tensor([1, 10, 100])
+    print(relu(m @ tensor([[1, -1, 0], [0, 1, -1], [-1, 0, 1]]) + b))
 """),
-    "mul_neg": ml("t32-tiny", """
-var a = -12345; var b = 678;
-print a * b; print b * a; print a * a; print -1 * -1; print 65537 * 65537;
-print -2147483648 * -1; print 3 * 0 * a;
+    "reuse_chain_tiny": ml("npu-tiny", """
+def main():
+    y = iota((4, 4)) - 7
+    w = tensor([[1, 0, 0, 1], [0, 2, 1, 0], [0, 1, -1, 1], [1, 0, 0, -1]])
+    for i in range(3):
+        y = relu(y @ w) - 3
+    print(y)
 """),
-    "mul_base": ml("t32-base", """
-var a = -12345; var b = 678; print a * b; print 65537 * 65537; print -7 * -7;
+    "reuse_base": ml("npu-base", """
+def main():
+    x = iota((8, 8)) - 30
+    w = iota((8, 8)) - 32
+    for i in range(3):
+        x = x @ w - 7
+        print(x)
 """),
-    "long_if": ml("t32-tiny", """
-var x = 1; var s = 0;
-if (x) {
-""" + "\n".join(f"  s = s + {i % 7};" for i in range(60)) + """
-} else {
-""" + "\n".join(f"  s = s - {i % 5};" for i in range(60)) + """
-}
-print s;
-x = 0;
-if (x) { s = 0; } else {
-""" + "\n".join(f"  s = s + {i % 3};" for i in range(70)) + """
-}
-print s;
+    "fusion_shared": ml("npu-wide", """
+def main():
+    x = iota((4, 9)) - 20
+    w = iota((9, 4)) - 18
+    y = x @ w + tensor([5, -500, 50, -5])
+    r = relu(y)
+    print(y)
+    print(r)
 """),
-    "long_base": ml("t32-base", """
-var i = 0; var s = 0;
-while (i < 2) {
-""" + "\n".join(f"  s = s + {i % 11};" for i in range(560)) + """
-  i = i + 1;
-}
-print s;
+    "fusion_shared_tiny": ml("npu-tiny", """
+def main():
+    x = tensor([[2, -3, 1], [-1, 4, -2], [0, -1, 5]])
+    y = x @ x + 1
+    print(relu(y))
+    print(y - relu(y))
 """),
-    "nested_long_tiny": ml("t32-tiny", """
-var i = 0; var j = 0; var s = 0;
-while (i < 3) {
-  j = 0;
-  while (j < 2) {
-""" + "\n".join(f"    s = s + {i % 4};" for i in range(45)) + """
-    j = j + 1;
-  }
-  i = i + 1;
-}
-print s;
+    "wrap_mix": ml("npu-base", """
+def main():
+    a = full((2, 3), 1073741824)
+    print(a + a)
+    print(a * 4)
+    m = tensor([[46341, 46341], [-46341, 46341]])
+    print(m @ m)
+    print(-full(2, -2147483648) - 1)
 """),
-    "big_data_base": ml("t32-base", """
-array big[4000];
-var t = 0;
-big[3999] = 17; big[2048] = 3; big[2047] = 4;
-t = big[3999] * big[2048] + big[2047];
-print t;
+    "scalars_tiny": ml("npu-tiny", """
+def bump(x: Tensor[5, i32], k: int) -> Tensor[5, i32]:
+    return x * k + k
+
+def main():
+    v = tensor([3, -1, 4, -1, 5])
+    s = 0
+    for k in range(1, 6):
+        v = bump(v, k) - 7 * k
+        s += k * k
+    print(v)
+    print(s)
+    print(-v)
+    print(ones(5) - v * 0)
 """),
-    "full_tiny": ml("t32-tiny", """
-array a[240];
-var i = 0;
-while (i < 240) { a[i] = i; i = i + 1; }
-print a[239] + a[0] + a[120];
+    "identity_folds": ml("npu-base", """
+def main():
+    x = iota((3, 5)) - 7
+    print(x + 0)
+    print(x * 1 - 0)
+    print(x * 0)
+    print(relu(relu(x)))
+    print(x.T.T)
+    print(relu(full((2, 2), -3)) + full((2, 2), 4) * 2)
+    print(x @ zeros((5, 2)) + x @ ones((5, 2)))
 """),
-    "overflow_wide": ml("t32-wide", """
-var x = 2147483647; print x + x; print x * 3; print -x - 2; print 0 - (0 - 2147483648);
+    "print_views": ml("npu-base", """
+def main():
+    v = tensor([7, 8, 9])
+    print(zeros((2, 3)) + v)
+    print(tensor([[1, 2], [3, 4], [5, 6]]).T)
+    print(full(4, -9))
+    print(123)
 """),
-    "sort": ml("t32-base", """
-array a[8];
-a[0] = 5; a[1] = -3; a[2] = 9; a[3] = 0; a[4] = -8; a[5] = 2; a[6] = 7; a[7] = 1;
-var i = 0;
-while (i < 8) {
-  var j = 0;
-  j = 0;
-  while (j < 7 - i) {
-    if (a[j] > a[j + 1]) { var t = 0; t = a[j]; a[j] = a[j + 1]; a[j + 1] = t; }
-    j = j + 1;
-  }
-  i = i + 1;
-}
-i = 0;
-while (i < 8) { print a[i]; i = i + 1; }
+    "big_data_tiny": ml("npu-tiny", """
+def main():
+    a = iota((10, 12))
+    print(a + a)
 """),
-    "primes_wide": ml("t32-wide", """
-var n = 2; var count = 0;
-while (n < 200) {
-  var d = 2; var prime = 1;
-  d = 2; prime = 1;
-  while (d * d <= n) { if (n % d == 0) { prime = 0; } d = d + 1; }
-  count = count + prime;
-  n = n + 1;
-}
-print count;
+    "long_rows_tiny": ml("npu-tiny", """
+def main():
+    a = iota((2, 24))
+    print(a + relu(a))
+    x = iota((2, 18))
+    print(x @ x.T)
 """),
-    "gcd_tiny": ml("t32-tiny", """
-var a = 1071; var b = 462;
-while (b != 0) { var t = 0; t = a % b; a = b; b = t; }
-print a;
+    "long_rows_base": ml("npu-base", """
+def main():
+    a = iota((2, 260))
+    print(relu(a - 300))
 """),
-    "compare_tiny": ml("t32-tiny", """
-var a = -2147483648; var b = 2147483647;
-print a < b; print a > b; print a <= a; print b >= a; print a == b; print a != b;
-print !b; print ~b; print -a;
+    "wide_k_wide": ml("npu-wide", """
+def main():
+    x = iota((5, 40)) - 77
+    w = iota((40, 7)) - 140
+    print(relu(x @ w + iota(7) * 1000))
+    print(transpose(x) @ (x @ w))
+"""),
+    "acc_tiny": ml("npu-tiny", """
+def main():
+    x = tensor([[-4, 3, -2, 1, 0, -1, 2], [5, -6, 7, -8, 9, -1, 0], [1, 1, -1, 1, -1, 1, 1]])
+    w = iota((7, 3)) - 10
+    print(x @ w + tensor([1, 2, 3]))
+    print(relu(x @ (w * 2)))
 """),
 }
 
-VALID_ASM = {
-    "imm_min": (asm("t32-base", """
-.data 4
-  addi r1, r0, -2048
-  out r1
-  andi r2, r1, -2048
-  out r2
-  ori r3, r0, -2048
-  out r3
-  addi r4, r0, 2047
-  addi r4, r4, 3
-  sw r1, -2048(r4)
-  lw r5, -2047(r4)
-  out r5
-  halt
-"""), "-2048\n-2048\n-2048\n0"),
-    "imm_wide": (asm("t32-wide", """
-  addi r1, r0, 32767
-  out r1
-  addi r1, r0, -32768
-  out r1
-  halt
-"""), "32767\n-32768"),
-    "r15_base": (asm("t32-base", """
-  addi r15, r0, 15
-  addi r14, r15, 1
-  out r15
-  out r14
-  halt
-"""), "15\n16"),
-    "r7_tiny": (asm("t32-tiny", """
-  addi r7, r0, -7
-  add r6, r7, r7
-  out r6
-  halt
-"""), "-14"),
-    "full_mem_base": (asm("t32-base", """
-.data 4096
-  lui r1, 0x1
-  addi r1, r1, -1
-  addi r2, r0, 99
-  sw r2, 0(r1)
-  lw r3, 0(r1)
-  out r3
-  halt
-"""), "99"),
-    "full_mem_tiny": (asm("t32-tiny", """
+VALID_NPU = {
+    "npu_spad_end_base": (npu("npu-base", """
+.data 32
+.word 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+  load 48, 0, 4, 4, 4, 1
+  load 32, 0, 4, 4, 4, 1
+  vadd 48, 48, 32, 8
+  vadd 56, 56, 40, 8
+  store 16, 48, 4, 4, 4
+  out 16, 1, 16, 0, 1
+"""), " ".join(str(2 * i) for i in range(1, 17))),
+    "npu_full_dram_tiny": (npu("npu-tiny", """
 .data 256
-  addi r1, r0, 31
-  sw r1, 255(r0)
-  sw r1, 0(r0)
-  lw r2, 255(r0)
-  out r2
-  halt
-"""), "31"),
-    "branch_edges_tiny": (asm("t32-tiny", f"""
-  addi r1, r0, 0
-  addi r2, r0, 2
-  beq r0, r0, fwd
-{nops(126)}
-fwd:
-  addi r1, r1, 1
-  out r1
-  beq r1, r2, done
-{nops(125)}
-  bne r1, r2, -128
-done:
-  halt
-"""), "1\n2"),
-    "branch_edges_base": (asm("t32-base", f"""
-  beq r0, r0, fwd
-{nops(2046)}
-fwd:
-  addi r1, r0, 5
-  out r1
-  halt
-"""), "5"),
-    "jal_tiny": (asm("t32-tiny", f"""
-  jal r0, far
-{nops(1000)}
-far:
-  addi r1, r0, 3
-  out r1
-  halt
-"""), "3"),
-    "jal_link": (asm("t32-base", """
-  addi r1, r0, 0
-  jal r2, f
-  out r2
-  jal r2, f
-  out r2
-  halt
-f:
-  addi r1, r1, 1
-  out r1
-  jalr r0, r2, 0
-"""), "1\n2\n2\n4"),
-    "r0_zero": (asm("t32-base", """
-  addi r0, r0, 5
-  out r0
-  jal r0, next
-next:
-  out r0
-  lui r0, 0x1
-  add r1, r0, r0
-  out r1
-  halt
-"""), "0\n0\n0"),
-    "sra_mix": (asm("t32-base", """
-  lui r1, 0x80000
-  addi r2, r0, 4
-  sra r3, r1, r2
-  out r3
-  srl r3, r1, r2
-  out r3
-  addi r2, r0, 31
-  sra r3, r1, r2
-  out r3
-  halt
-"""), "-134217728\n134217728\n-1"),
-    "signed_branches": (asm("t32-base", """
-  lui r1, 0x80000
-  addi r2, r0, 1
-  blt r1, r2, a
-  out r0
-  halt
-a:
-  addi r3, r0, 1
-  out r3
-  bge r2, r1, b
-  out r0
-  halt
-b:
-  addi r3, r0, 2
-  out r3
-  sltu r4, r2, r1
-  out r4
-  slt r4, r2, r1
-  out r4
-  halt
-"""), "1\n2\n1\n0"),
-    "div_asm": (asm("t32-base", """
-  lui r1, 0x80000
-  addi r2, r0, -1
-  div r3, r1, r2
-  out r3
-  rem r3, r1, r2
-  out r3
-  addi r4, r0, -9
-  addi r5, r0, 4
-  div r3, r4, r5
-  out r3
-  rem r3, r4, r5
-  out r3
-  halt
-"""), "-2147483648\n0\n-2\n-1"),
-    "add_wrap": (asm("t32-base", """
-  addi r1, r0, -1
-  add r2, r1, r1
-  out r2
-  lui r3, 0x7ffff
-  addi r3, r3, 2047
-  addi r3, r3, 2047
-  addi r3, r3, 1
-  add r4, r3, r2
-  out r3
-  out r4
-  halt
-"""), "-2\n2147483647\n2147483645"),
-    "lui_max": (asm("t32-base", """
-  lui r1, 0xfffff
-  out r1
-  halt
-"""), "-4096"),
-    "trap_mem": (asm("t32-base", """
-.data 2
-  addi r1, r0, 1
-  out r1
-  lw r2, 2(r0)
-  out r2
-  halt
-"""), "1\n<trap: mem_out_of_range>"),
+.word 255, 77
+  load 0, 254, 1, 2, 0, 1
+  store 0, 0, 1, 2, 0
+  out 0, 1, 2, 0, 1
+  out 254, 1, 2, 0, 1
+"""), "0 77\n0 77"),
+    "npu_mm_max_base": (npu("npu-base", """
+.data 16
+.word 0, 3
+  load 0, 0, 4, 4, 0, 0
+  load 16, 0, 4, 4, 0, 0
+  mm 32, 0, 16, 4, 4, 4
+  mma 32, 0, 16, 4, 4, 4
+  vadd 32, 32, 0, 8
+  store 0, 32, 4, 4, 4
+  out 0, 4, 4, 4, 1
+"""), "75 75 75 75\n75 75 75 75\n72 72 72 72\n72 72 72 72"),
+    "npu_stride_max_base": (npu("npu-base", """
+.data 260
+.word 0, 5
+.word 255, 9
+  load 0, 0, 2, 1, 255, 0
+  vmul 0, 0, 0, 2
+  store 4, 0, 2, 1, 252
+  out 4, 2, 1, 252, 0
+"""), "25\n81"),
+    "npu_wide_shape": (npu("npu-wide", """
+.data 48
+.word 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
+.word 16, 1
+  load 0, 0, 8, 16, 0, 1
+  load 128, 16, 16, 4, 0, 0
+  mm 192, 0, 128, 8, 16, 4
+  vadd 192, 192, 192, 32
+  store 16, 192, 8, 4, 4
+  out 16, 1, 4, 0, 1
+  out 44, 1, 4, 0, 1
+"""), "272 272 272 272\n272 272 272 272"),
+    "npu_wrap": (npu("npu-base", """
+.data 8
+.word 0, 2147483647, 65536, -2147483648
+.word 4, 65536
+  load 0, 0, 1, 3, 0, 1
+  vadd 0, 0, 0, 3
+  store 0, 0, 1, 3, 0
+  out 0, 1, 3, 0, 1
+  load 0, 4, 1, 1, 0, 0
+  mm 4, 0, 0, 1, 1, 1
+  store 4, 4, 1, 1, 0
+  out 4, 1, 1, 0, 0
+"""), "-2 131072 0\n0"),
+    "npu_align_tiny": (npu("npu-tiny", """
+.data 4
+.word 2, 5, -6
+  load 1, 2, 1, 2, 0, 1
+  vrelu 3, 1, 2
+  store 0, 3, 1, 2, 0
+  out 1, 1, 3, 0, 1
+"""), "0 5 -6"),
 }
 
-INVALID_ASM = {
-    "imm_pos": asm("t32-base", "  addi r1, r0, 2048\n  halt"),
-    "imm_neg": asm("t32-base", "  addi r1, r0, -2049\n  halt"),
-    "imm_wide": asm("t32-wide", "  addi r1, r0, 32768\n  halt"),
-    "sw_imm": asm("t32-base", ".data 4096\n  sw r1, 3000(r0)\n  halt"),
-    "lui_big": asm("t32-base", "  lui r1, 0x100000\n  halt"),
-    "reg_tiny": asm("t32-tiny", "  addi r8, r0, 1\n  halt"),
-    "reg_base_lw": asm("t32-tiny", ".data 1\n  lw r1, 0(r9)\n  halt"),
-    "mul_tiny": asm("t32-tiny", "  mul r1, r2, r3\n  halt"),
-    "branch_pos_tiny": asm("t32-tiny", f"  beq r0, r0, t\n{nops(127)}\nt:\n  halt"),
-    "branch_neg_tiny": asm("t32-tiny", f"b:\n{nops(129)}\n  beq r0, r0, b\n  halt"),
-    "branch_base": asm("t32-base", f"  beq r0, r0, t\n{nops(2047)}\nt:\n  halt"),
-    "jal_tiny": asm("t32-tiny", f"  jal r0, t\n{nops(32767)}\nt:\n  halt"),
-    "target_outside": asm("t32-base", "  beq r0, r0, 5\n  halt"),
-    "mem_tiny": asm("t32-tiny", ".data 257\n  halt"),
-    "mem_base": asm("t32-base", ".data 4097\n  halt"),
+INVALID_NPU = {
+    "npu_len_base": npu("npu-base", "  vadd 0, 0, 16, 9"),
+    "npu_len_wide": npu("npu-wide", "  vrelu 0, 0, 65"),
+    "npu_spad_tiny": npu("npu-tiny", "  mm 13, 0, 4, 2, 2, 2"),
+    "npu_k_wide": npu("npu-wide", "  mm 0, 0, 0, 1, 17, 1"),
+    "npu_m_base": npu("npu-base", "  mm 0, 0, 0, 5, 1, 1"),
+    "npu_mma_tiny": npu("npu-tiny", "  mma 0, 0, 0, 1, 1, 1"),
+    "npu_stride_base": npu("npu-base", ".data 600\n  load 0, 0, 2, 1, 256, 0"),
+    "npu_stride_store_tiny": npu("npu-tiny", ".data 64\n  store 0, 0, 2, 1, 16"),
+    "npu_align_store_tiny": npu("npu-tiny", ".data 4\n  store 1, 0, 1, 1, 0"),
+    "npu_align_wide": npu("npu-wide", ".data 8\n  load 0, 6, 1, 1, 0, 0"),
+    "npu_rows_zero": npu("npu-base", ".data 4\n  load 0, 0, 0, 1, 1, 1"),
+    "npu_dram_read": npu("npu-base", ".data 8\n  load 0, 0, 2, 2, 4, 4"),
+    "npu_out_range": npu("npu-wide", ".data 6\n  out 0, 3, 2, 3, 1"),
+    "npu_dram_size": npu("npu-tiny", ".data 257"),
+    "npu_word_outside": npu("npu-base", ".data 10\n.word 8, 1, 2, 3"),
 }
 
 
 def main() -> None:
     sys.path.insert(0, str(SUT))
-    from cli import reference_text, execute, normalize  # noqa: E402
+    from cli import execute, kind_of, normalize, reference_text  # noqa: E402
 
     if OUT.exists():
         shutil.rmtree(OUT)
@@ -384,22 +311,22 @@ def main() -> None:
         assert ref["ok"], (name, ref)
         (valid / f"{name}.ml").write_text(src)
         (valid / f"{name}.expected").write_text(ref["result"] + "\n")
-    for name, (src, expected) in VALID_ASM.items():
-        (valid / f"{name}.s").write_text(src)
+    for name, (src, expected) in VALID_NPU.items():
+        (valid / f"{name}.npu").write_text(src)
         (valid / f"{name}.expected").write_text(expected + "\n")
-    for name, src in INVALID_ASM.items():
-        (invalid / f"{name}.s").write_text(src)
+    for name, src in INVALID_NPU.items():
+        (invalid / f"{name}.npu").write_text(src)
         (invalid / f"{name}.expected").write_text("<rejected>\n")
 
     # The clean toolchain must pass the whole corpus.
     bad = []
     for d in (valid, invalid):
         for src in sorted(d.iterdir()):
-            if src.suffix not in (".ml", ".s"):
+            if src.suffix not in (".ml", ".npu"):
                 continue
             text = src.read_text()
             machine = text.splitlines()[0].split("machine:")[1].strip()
-            res = execute(text, "ml" if src.suffix == ".ml" else "asm", machine)
+            res = execute(text, kind_of(src), machine)
             want = src.with_suffix(".expected").read_text()
             if normalize(res["actual"]) != normalize(want):
                 bad.append((src.name, res["actual"][:80], want[:80], res.get("detail", "")[:120]))

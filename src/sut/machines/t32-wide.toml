@@ -1,7 +1,0 @@
-# T32 profile with wide immediates and large memory.
-num_regs = 16
-imm_bits = 16
-branch_bits = 16
-jump_bits = 22
-mem_words = 65536
-has_mul = true

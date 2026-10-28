@@ -16,9 +16,10 @@ valid and invalid programs, and the Reviewer checks your diff.
   denied (policy P2). Protected files are never editable (P3).
 - Make the behavior match the spec. Do not add restrictions: every program
   that the spec says is valid must still be accepted and must give the correct
-  result (spec §4.5, §9.2, §9.3). Forbidden examples: rejecting large
-  constants, deep expressions, long loops, large arrays, or some registers;
-  narrowing a valid range; adding special cases for test names or test inputs.
+  result (spec §4.5, §9.2, §9.3). Forbidden examples: rejecting some tensor
+  shapes, large matrices, transposes, long rows, or the largest value of a
+  hardware limit; narrowing a valid range; adding special cases for test
+  names or test inputs.
 - Do not widen a check beyond the spec. Programs that the spec says are
   invalid must still be rejected.
 - Change a test only if the `tests` layer is assigned and a spec paragraph

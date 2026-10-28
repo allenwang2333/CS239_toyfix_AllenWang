@@ -1,0 +1,8 @@
+# Large NPU: a non-square 8x16x4 matrix unit (m x k x n) and large memory.
+mm_shape = [8, 16, 4]
+vlen = 64
+has_mma = true
+stride_bits = 16
+dma_align = 4
+spad_words = 256
+dram_words = 65536

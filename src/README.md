@@ -1,9 +1,9 @@
 # ToyFix
 
 ToyFix is a multi-agent application that diagnoses and repairs faults in a toy
-compiler toolchain: a 32-bit ISA (T32) with an assembler, a validator for
-hardware profiles, an instruction-level simulator, and a compiler for a small
-language (MiniLang). It asks whether LLM agents can fix faults in the right
+compiler toolchain: a tile-based AI accelerator (NPU) with an assembler, a
+validator for hardware profiles, and a simulator, and a compiler for MiniLang,
+a small tensor language with Python syntax and an MLIR-style middle end. It asks whether LLM agents can fix faults in the right
 layer (tests, hardware constraints, compiler lowering, or simulator) **without
 adding restrictions on valid programs**.
 
@@ -36,9 +36,64 @@ Optional environment variables:
 | `TOYFIX_BASE_URL` | `https://api.deepseek.com` | Any OpenAI-compatible endpoint |
 | `TOYFIX_API_KEY` | (none) | Used instead of `DEEPSEEK_API_KEY` if set |
 
+## MiniLang
+
+MiniLang programs are Python files with a small subset of Python
+(spec §7, §8). Every value is an `int` or an i32 tensor of rank 1 or 2.
+Functions are inlined and `for ... in range(...)` loops are unrolled at
+compile time.
+
+```python
+# machine: npu-base
+def dense(x: Tensor[4, 6, i32], w: Tensor[6, 5, i32], b: Tensor[5, i32]) -> Tensor[4, 5, i32]:
+    return relu(x @ w + b)
+
+def main():
+    x = iota((4, 6)) - 11
+    w = full((6, 5), 2)
+    print(dense(x, w, tensor([3, -20, 0, 7, -1])))
+    print(x.T)
+```
+
+Operations: `+ - *` (elementwise, with int and row broadcasting), `@`,
+unary `-`, `.T` / `transpose`, `relu`, and the constructors `tensor`,
+`zeros`, `ones`, `full`, `iota`.
+
+The compiler pipeline (spec §9.4) is: frontend (Python `ast` -> `ml`
+dialect) -> canonicalize -> fuse (matmul + bias + relu -> `ml.linear`) ->
+bufferize (strided `memref` views, buffer reuse) -> lower-npu (tiling into
+`npu` dialect ops) -> NPU assembly. The IR is printed in MLIR generic syntax.
+
+```
+cd src/sut
+python3 cli.py run tests/dense_layer.ml               # compile, validate, simulate
+python3 cli.py run tests/dense_layer.ml --machine npu-tiny
+python3 cli.py reference tests/dense_layer.ml         # reference interpreter
+python3 cli.py ir tests/dense_layer.ml --stage fuse   # IR after one stage (or --stage all)
+python3 cli.py compile tests/dense_layer.ml           # NPU assembly
+```
+
+The NPU (spec §1 - §6) has a DRAM, a scratchpad, and 9 instructions: `load`
+and `store` (2-D strided DMA), `mm` and `mma` (tile matrix product, with
+accumulate), `vadd`, `vsub`, `vmul`, `vrelu`, and `out`.
+
+Each hardware profile (`machines/npu-*.toml`, spec §4) sets limits that the
+validator checks and that the compiler must work around:
+
+| Profile | mm_shape (M x K x N) | vlen | has_mma | stride_bits | dma_align | spad_words | dram_words |
+|---|---|---|---|---|---|---|---|
+| `npu-tiny` | 2 x 2 x 2 | 2 | false | 4 | 2 | 16 | 256 |
+| `npu-base` | 4 x 4 x 4 | 8 | true | 8 | 4 | 64 | 4096 |
+| `npu-wide` | 8 x 16 x 4 | 64 | true | 16 | 4 | 256 | 65536 |
+
+The compiler tiles matrix products by `mm_shape`, splits vector work into
+`vlen` pieces, adds partial products with `mm` + `vadd` when there is no
+`mma`, splits a DMA transfer into one transfer per row when the row stride
+does not fit `stride_bits`, and pads every row and buffer to `dma_align`.
+
 ## Run
 
-All commands run from `src/`.
+ToyFix commands run from `src/`.
 
 ```
 cd src
@@ -64,7 +119,7 @@ $ python3 -m toyfix episode C2 --quiet
  "attempts": 1,
  "diagnosed_layers": ["constraints"],
  "changed_layers": ["constraints"],
- "final_valid_corpus": [38, 38],
+ "final_valid_corpus": [29, 29],
  "final_invalid_corpus": [15, 15],
  "restricting_attempts": 0,
  "tool_calls": 45,
@@ -98,15 +153,15 @@ From the repository root:
 python3 -m unittest discover -s tests -t . -v
 ```
 
-The suite (65 tests, no LLM, no network, about 30 s) covers:
+The suite (no LLM, no network) covers:
 
-- `test_isa.py`: encoding round trips and the semantics of every instruction,
-  including the spec's edge cases and all traps.
-- `test_validator.py`: every validity rule at its exact boundary on every
-  profile.
-- `test_minilang.py`: parser errors, hand-computed reference semantics, and
-  differential testing of the compiler against the reference interpreter on
-  every profile (all test and corpus programs plus 40 random programs).
+- `test_npu.py`: the NPU assembler, every validity rule at its exact
+  boundary on every profile, and the semantics of every NPU instruction.
+- `test_minilang.py`: parser errors, hand-computed reference semantics, the
+  printed IR, the passes (folding, CSE, fusion, views, buffer reuse), the
+  verifier, the memory bound of spec §9.3, and differential testing of the
+  compiler against the reference interpreter on every NPU profile (all test
+  and corpus programs plus 60 random programs).
 - `test_faults.py`: every fault is detected; restoring clean code passes;
   wrong fixes are caught (a loosened validator by the invalid corpus, a
   wrong-layer fix by the valid corpus, a test edited to match a bug by P4,
@@ -121,6 +176,11 @@ The suite (65 tests, no LLM, no network, about 30 s) covers:
   list, policy numbering).
 
 ## Results (October 2026, `deepseek-flash`, 4 attempts per episode)
+
+These results were measured on an earlier version of the toolchain, in which
+MiniLang was a small imperative language compiled to a scalar ISA (T32). That
+ISA is removed and every fault in the catalog has changed since then, so the
+benchmark must be run again for the current catalog.
 
 All 22 catalog faults, each run once per configuration:
 
@@ -153,12 +213,13 @@ scripted episode in `toyfix/episodes/example4_*`.
 src/
   README.md
   sut/                    the clean toolchain (copied into each episode)
-    spec.md               T32 + MiniLang specification (source of truth)
-    machines/*.toml       hardware profiles
-    t32/                  isa.py, assembler.py, simulator.py, validator.py, machine.py
-    minilang/             parser.py, reference.py (oracle), compiler.py
+    spec.md               NPU + MiniLang specification (source of truth)
+    machines/*.toml       hardware profiles (npu-*)
+    npu/                  isa.py, assembler.py, simulator.py, validator.py, machine.py
+    minilang/             parser.py (frontend), reference.py (oracle),
+                          ir.py (MLIR-style IR), passes.py, compiler.py
     cli.py                JSON command-line harness used by the tools
-    tests/                22 visible tests (*.ml, *.s, *.expected)
+    tests/                24 visible tests (*.ml, *.npu, *.expected)
   toyfix/
     __main__.py           command line
     agents/               coordinator, llm_agent (Diagnoser/Repair/Reviewer/Solo),
@@ -169,7 +230,7 @@ src/
     episode.py            episode runner, scoreboard, trajectory renderer
     llm.py                DeepSeek client and scripted client
     workspace.py          episode workspace, snapshots, diffs
-    hidden/               hidden corpus (38 valid, 15 invalid) and its builder
+    hidden/               hidden corpus (29 valid, 15 invalid) and its builder
     make_docs.py          regenerates tools.md and the LLM agent docs
     package.py            builds the submission archives
 tests/                    offline unittest suite

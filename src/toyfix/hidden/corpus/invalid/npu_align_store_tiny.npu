@@ -1,0 +1,3 @@
+; machine: npu-tiny
+.data 4
+  store 1, 0, 1, 1, 0

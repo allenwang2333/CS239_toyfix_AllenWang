@@ -14,9 +14,9 @@ from toyfix.episode import run_episode
 from toyfix.faults import CATALOG
 from toyfix.llm import ScriptedClient
 
-FIX_C2 = {"path": "t32/validator.py",
-          "old_text": "if program.data_words >= machine.mem_words:",
-          "new_text": "if program.data_words > machine.mem_words:"}
+FIX_C2 = {"path": "npu/validator.py",
+          "old_text": "if v >= stride_limit - 1:",
+          "new_text": "if v >= stride_limit:"}
 
 
 def episode(fault: str, script: list, **kw):
@@ -38,11 +38,12 @@ class EpisodeTest(unittest.TestCase):
     def test_fixed_episode(self):
         script = [
             # Diagnoser
-            [("run_tests", {"filter": "full_memory"})],
+            [("run_tests", {"filter": "npu_stride_max"})],
             [("edit_file", FIX_C2)],  # denied: P1
-            [("submit_diagnosis", {"layer": "constraints", "files": ["t32/validator.py"],
-                                   "root_cause": "data_words equal to mem_words is rejected",
-                                   "evidence": "full_memory.s is rejected", "spec_sections": ["4.4"]})],
+            [("submit_diagnosis", {"layer": "constraints", "files": ["npu/validator.py"],
+                                   "root_cause": "rstride = 2^stride_bits - 1 is rejected",
+                                   "evidence": "npu_stride_max.npu is rejected",
+                                   "spec_sections": ["4.2", "4.4"]})],
             # Repair Agent
             [("edit_file", FIX_C2)],
             [("run_tests", {})],
@@ -58,11 +59,11 @@ class EpisodeTest(unittest.TestCase):
             self.assertEqual(result["attempts"], 1)
             self.assertTrue(result["first_diagnosis_correct"])
             self.assertTrue(result["fixed_in_injected_layers"])
-            self.assertEqual(list(result["final_valid_corpus"]), [38, 38])
+            self.assertEqual(list(result["final_valid_corpus"]), [29, 29])
             self.assertEqual([d["policy"] for d in result["policy_denials"]], ["P1"])
             ep = Path(result["episode_dir"])
-            self.assertIn("data_words > machine.mem_words",
-                          (ep / "workspace/t32/validator.py").read_text())
+            self.assertIn("if v >= stride_limit:",
+                          (ep / "workspace/npu/validator.py").read_text())
             self.assertIn("FIXED", (ep / "trajectory.md").read_text())
 
             # P7: no fault metadata in anything an agent saw.
@@ -74,13 +75,13 @@ class EpisodeTest(unittest.TestCase):
     def test_wrong_layer_loosening_is_reverted_and_episode_unresolved(self):
         script = [
             [("submit_diagnosis", {"layer": "constraints", "root_cause": "validator rejects "
-                                   "long branches", "evidence": "long_loop is rejected"})],
+                                   "valid programs", "evidence": "fusion_uses is wrong"})],
             # Repair Agent: tries the compiler first (denied), then loosens the validator.
             [("edit_file", {"path": "minilang/compiler.py", "old_text": "x", "new_text": "y"})],
-            [("edit_file", {"path": "t32/validator.py",
-                            "old_text": "if not _fits(ins.imm, machine.branch_bits):",
-                            "new_text": "if not _fits(ins.imm, machine.imm_bits):"})],
-            [("submit_patch", {"summary": "accept longer branches"})],
+            [("edit_file", {"path": "npu/validator.py",
+                            "old_text": "if v >= stride_limit:",
+                            "new_text": "if v >= stride_limit * 2:"})],
+            [("submit_patch", {"summary": "accept longer strides"})],
         ]
         result, _, tmp = episode("L3", script, max_attempts=1)
         with tmp:
@@ -93,12 +94,12 @@ class EpisodeTest(unittest.TestCase):
 
     def test_reviewer_rejection_reverts(self):
         script = [
-            [("submit_diagnosis", {"layer": "tests", "root_cause": "expected floor division",
-                                   "evidence": "reference_eval gives -3", "spec_sections": ["8.3"]})],
-            [("edit_file", {"path": "tests/division.expected",
-                            "old_text": "-4\n1\n-4\n-1\n3\n-1\n",
-                            "new_text": "-3\n-1\n-3\n1\n3\n-1\n"})],
-            [("submit_patch", {"summary": "fix expected values", "spec_sections": ["8.3"]})],
+            [("submit_diagnosis", {"layer": "tests", "root_cause": "expected relu before bias",
+                                   "evidence": "reference_eval differs", "spec_sections": ["8.5"]})],
+            [("edit_file", {"path": "tests/dense_layer.expected",
+                            "old_text": "3 -20 0 7 -1\n3 -20 0 7 -1\n",
+                            "new_text": "0 0 0 0 0\n1 0 0 3 0\n"})],
+            [("submit_patch", {"summary": "fix expected values", "spec_sections": ["8.5"]})],
             [("submit_review", {"decision": "reject", "rationale": "demo rejection",
                                 "concerns": ["none really"]})],
         ]
@@ -112,16 +113,21 @@ class EpisodeTest(unittest.TestCase):
         # X3 = C3 (validator) + L2 (compiler). Fixing C3 alone does not pass,
         # but it makes nothing worse, so it is kept for the next attempt.
         script = [
-            [("submit_diagnosis", {"layer": "constraints", "root_cause": "last register rejected",
-                                   "evidence": "reg_max.s rejected"})],
-            [("edit_file", {"path": "t32/validator.py", "old_text": "if r >= machine.num_regs - 1:",
-                            "new_text": "if r >= machine.num_regs:"})],
-            [("submit_patch", {"summary": "fix register bound"})],
-            [("submit_diagnosis", {"layer": "compiler", "root_cause": "nested spills share a slot",
-                                   "evidence": "deep_expr wrong"})],
-            [("edit_file", {"path": "minilang/compiler.py", "old_text": "slot = self.spill_base\n",
-                            "new_text": "slot = self.spill_base + self.spill_level\n"})],
-            [("submit_patch", {"summary": "one slot per nesting level"})],
+            [("submit_diagnosis", {"layer": "constraints", "root_cause": "alignment checked on spad",
+                                   "evidence": "npu_align.npu rejected"})],
+            [("edit_file", {"path": "npu/validator.py",
+                            "old_text": 'if get("spad") % machine.dma_align != 0:',
+                            "new_text": 'if get("dram") % machine.dma_align != 0:'})],
+            [("submit_patch", {"summary": "check alignment on the DRAM address"})],
+            [("submit_diagnosis", {"layer": "compiler", "root_cause": "a result overlaps a "
+                                   "dying operand", "evidence": "reuse wrong"})],
+            [("edit_file", {"path": "minilang/passes.py",
+                            "old_text": "            for r in dict.fromkeys(root[v] for v in op.operands):\n"
+                                        "                if last[r] == i and r in region:\n"
+                                        "                    alloc.free(*region.pop(r))\n"
+                                        "            shape = op.result.type.shape\n",
+                            "new_text": "            shape = op.result.type.shape\n"})],
+            [("submit_patch", {"summary": "free operands after the result is allocated"})],
             [("submit_review", {"decision": "approve", "rationale": "both match the spec",
                                 "spec_sections": ["4.4", "9.2"]})],
         ]

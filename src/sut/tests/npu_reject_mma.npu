@@ -1,0 +1,3 @@
+; machine: npu-tiny
+; npu-tiny has no mma instruction (spec §4.4(c)).
+  mma 0, 0, 0, 1, 1, 1

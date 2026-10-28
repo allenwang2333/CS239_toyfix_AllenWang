@@ -1,0 +1,17 @@
+; machine: npu-base
+; Strided DMA: a transposed load, a broadcast load, and strided output (spec §3).
+.data 24
+.word 0, 1, 2, 3            ; a 2x3 matrix at 0; each row is padded to 4 words
+.word 4, 4, 5, 6
+.word 8, 10, 20, 30         ; a vector at 8
+  load 0, 0, 3, 2, 1, 4     ; spad[0..5] = 1 4 2 5 3 6 (the transpose)
+  store 12, 0, 3, 2, 4
+  out 12, 3, 2, 4, 1        ; 1 4 / 2 5 / 3 6
+  load 8, 8, 2, 3, 0, 1     ; spad[8..13] = 10 20 30 10 20 30 (row stride 0)
+  load 0, 0, 2, 3, 4, 1     ; spad[0..5] = 1 2 3 4 5 6
+  vadd 0, 0, 8, 6
+  store 12, 0, 2, 3, 4
+  out 12, 2, 3, 4, 1        ; 11 22 33 / 14 25 36
+  out 8, 2, 3, 0, 1         ; 10 20 30 / 10 20 30
+  out 0, 3, 1, 1, 0         ; 1 / 2 / 3
+  out 23, 1, 1, 0, 0        ; the last DRAM word is still 0

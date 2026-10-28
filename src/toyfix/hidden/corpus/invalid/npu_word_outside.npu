@@ -1,0 +1,3 @@
+; machine: npu-base
+.data 10
+.word 8, 1, 2, 3

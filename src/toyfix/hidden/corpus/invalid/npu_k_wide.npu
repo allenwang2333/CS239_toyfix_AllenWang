@@ -1,0 +1,2 @@
+; machine: npu-wide
+mm 0, 0, 0, 1, 17, 1

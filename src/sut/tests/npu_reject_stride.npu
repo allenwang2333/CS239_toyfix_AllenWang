@@ -1,0 +1,4 @@
+; machine: npu-tiny
+; The row stride 16 does not fit stride_bits = 4 (spec §4.4(e)).
+.data 64
+  load 0, 0, 2, 2, 16, 1

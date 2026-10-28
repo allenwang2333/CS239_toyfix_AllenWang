@@ -52,7 +52,7 @@ class VerifierReport:
 
 def _comment_only(line: str) -> bool:
     s = line.strip()
-    return not s or s.startswith("//") or s.startswith(";")
+    return not s or s.startswith("#") or s.startswith(";")
 
 
 def verify(ctx: EpisodeContext) -> VerifierReport:
@@ -105,7 +105,7 @@ def verify(ctx: EpisodeContext) -> VerifierReport:
             if want is None or [l.rstrip() for l in got.strip().splitlines()] != \
                     [l.rstrip() for l in want.strip().splitlines()]:
                 problems.append(f"{rel}: new expected result differs from the reference interpreter (P4)")
-        elif path.suffix in (".ml", ".s"):
+        elif path.suffix in (".ml", ".npu"):
             old = (ws.baseline / rel).read_text().splitlines()
             new = (ws.dir / rel).read_text().splitlines()
             removed = [l for l in old if l not in new]
@@ -121,7 +121,7 @@ def verify(ctx: EpisodeContext) -> VerifierReport:
         if rel.startswith("tests/"):
             continue
         for line in lines:
-            hits = [n for n in names if re.search(rf"\b{re.escape(n)}\.(ml|s|expected)\b", line)]
+            hits = [n for n in names if re.search(rf"\b{re.escape(n)}\.(ml|npu|expected)\b", line)]
             if "tests/" in line or ".expected" in line or hits:
                 problems.append(f"{rel}: '{line.strip()[:80]}'")
     rep.checks.append(Check("no_test_special_cases", "P5", not problems,

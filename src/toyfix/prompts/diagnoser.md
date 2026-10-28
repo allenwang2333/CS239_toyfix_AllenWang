@@ -22,24 +22,25 @@ may edit only that layer.
      see if the error is allowed.
    - `<rejected>`: run `validate_program` and read the violation. Check the
      rule against spec §4.2 and §4.4. If the spec says the program is valid,
-     the validator is wrong. If the compiler emitted an instruction that the
-     spec says is invalid, the compiler is wrong (see §9.1, §9.2).
-   - Wrong output: use `compile_program` and `trace_execution`. If the emitted
+     the validator is wrong. If the compiler emitted an
+     instruction that the spec says is invalid, the compiler is wrong (see
+     §9.1, §9.2).
+   - Wrong output: use `compile_program` and `trace_execution`. With `stage`,
+     `compile_program` shows the IR after each compiler pass. If the emitted
      instructions are wrong, the compiler is wrong. If a correct instruction
-     gives a result that differs from spec §3, the simulator is wrong. A small
-     assembly program is the clearest way to test one instruction.
-   - `<trap: step_limit>` usually means an infinite loop. Trace the loop.
+     gives a result that differs from spec §3, the simulator is wrong. A small assembly program is the clearest way to test
+     one instruction.
 4. Make the failing program as small as possible. `minimize_failure` can help
    for MiniLang.
 5. A symptom can appear in one layer while the cause is in another. Example:
-   if the simulator executes `jal` wrongly, compiled code that calls a routine
-   looks wrong, but the compiler is correct.
+   if the NPU simulator executes `mma` wrongly, compiled matrix products look
+   wrong, but the compiler is correct.
 
 ## Rules
 
 - Do not guess. Every claim in `evidence` must come from a tool result.
 - Cite the spec paragraphs that define the correct behavior (for example
-  `3.1`, `4.2`, `9.2`).
+  `3.1`, `4.4`, `9.2`).
 - If the failures have more than one cause, diagnose the cause that explains
   the most failures first. In `root_cause`, name the failures that it does not
   explain.

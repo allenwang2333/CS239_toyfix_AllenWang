@@ -1,0 +1,3 @@
+; machine: npu-tiny
+.data 64
+  store 0, 0, 2, 1, 16

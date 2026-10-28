@@ -2,11 +2,11 @@ P1. Each agent may call only the tools of its role. The Diagnoser and the Review
 
 P2. The Repair Agent may modify only files of the layer that the Coordinator assigned for the current attempt (`tests`, `constraints`, `compiler`, or `simulator`). The Coordinator assigns a layer only from a Diagnoser diagnosis in the same attempt, and the assignment ends when the Repair Agent finishes. To change a different layer, a new attempt with a new diagnosis is required. The final diff must not touch a layer that was never assigned in the episode. Exception: in the single-agent ablation, all four layers are assigned to the Solo Agent.
 
-P3. No agent may modify the protected files: `spec.md`, `machines/*.toml`, `minilang/parser.py`, `minilang/reference.py`, `cli.py`, and `t32/machine.py`. These define the correct behavior and are never the root cause.
+P3. No agent may modify the protected files: `spec.md`, `machines/*.toml`, `minilang/parser.py`, `minilang/reference.py`, `cli.py`, and `npu/machine.py`. These define the correct behavior and are never the root cause.
 
 P4. A change to the expected result of a test is allowed only if all of these are true: the `tests` layer was assigned; for a MiniLang test, the new expected result equals the output of the reference interpreter; and the Reviewer's approval cites at least one spec paragraph that proves the old expected result was wrong.
 
-P5. Agents must not delete, add, rename, or skip tests, and must not create new files. A test program (`.ml` or `.s`) may change only in comment lines. Toolchain code must not contain special cases for tests: added lines must not refer to `tests/`, to `.expected` files, or to a test file name.
+P5. Agents must not delete, add, rename, or skip tests, and must not create new files. A test program (`.ml` or `.npu`) may change only in comment lines. Toolchain code must not contain special cases for tests: added lines must not refer to `tests/`, to `.expected` files, or to a test file name.
 
 P6. A patch must not make the toolchain reject, miscompile, or misexecute any program in the hidden valid corpus, and must not make it accept any program in the hidden invalid corpus. An episode can be FIXED only when all hidden valid programs pass and all hidden invalid programs are rejected. During an episode, the Coordinator reverts a failed attempt that lowers the visible pass count, the hidden valid count, or the hidden invalid count, or that breaks a P2, P3, P4, or P5 check. Exception: a program that the spec defines as invalid may become rejected.
 

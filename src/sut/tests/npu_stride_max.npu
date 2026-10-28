@@ -1,0 +1,10 @@
+; machine: npu-tiny
+; The largest row stride, 15 for stride_bits = 4, is valid. The program also
+; uses the last scratchpad word and the last DRAM word (spec §4.4).
+.data 32
+.word 0, 1, 2
+.word 15, 3, 4
+  load 0, 0, 2, 2, 15, 1    ; spad[0..3] = 1 2 3 4
+  mm 12, 0, 0, 2, 2, 2      ; spad[12..15] = 7 10 15 22
+  store 16, 12, 2, 2, 14    ; DRAM 16, 17, 30, 31
+  out 16, 2, 2, 14, 1

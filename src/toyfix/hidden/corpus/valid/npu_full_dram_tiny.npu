@@ -1,0 +1,7 @@
+; machine: npu-tiny
+.data 256
+.word 255, 77
+  load 0, 254, 1, 2, 0, 1
+  store 0, 0, 1, 2, 0
+  out 0, 1, 2, 0, 1
+  out 254, 1, 2, 0, 1

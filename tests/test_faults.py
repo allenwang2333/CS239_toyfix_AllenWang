@@ -65,19 +65,18 @@ class CatalogTest(unittest.TestCase):
 class WrongFixTest(unittest.TestCase):
     def test_over_restricting_validator_lowers_valid_count(self):
         fw = FaultWorkspace(None, {"constraints"})
-        fw.edit("t32/validator.py", "lo = -(1 << (bits - 1))\n", "lo = -(1 << (bits - 1)) + 1\n")
+        fw.edit("npu/validator.py", 'count("len", machine.vlen)', 'count("len", machine.vlen - 1)')
         rep = fw.verify()
         fw.close()
         self.assertFalse(rep.passed)
         self.assertLess(rep.valid[0], rep.valid[1])
 
     def test_loosened_validator_is_caught_by_invalid_corpus(self):
-        # Fault C4 checks jal against branch_bits. Deleting the jal range check
-        # makes every visible test pass, but invalid programs are accepted.
-        fw = FaultWorkspace("C4", {"constraints"})
-        fw.edit("t32/validator.py",
-                "if not _fits(ins.imm, machine.branch_bits):\n                errors.append(f\"pc {pc}: jump",
-                "if False:\n                errors.append(f\"pc {pc}: jump")
+        # No visible test checks the DRAM range rule. Deleting it makes every
+        # visible test pass, but invalid programs are accepted.
+        fw = FaultWorkspace(None, {"constraints"})
+        fw.edit("npu/validator.py", "            if last >= program.data_words:",
+                "            if False:")
         rep = fw.verify()
         fw.close()
         self.assertEqual(rep.failing_tests, [])
@@ -85,20 +84,21 @@ class WrongFixTest(unittest.TestCase):
         self.assertFalse(rep.passed)
 
     def test_wrong_layer_fix_is_caught_by_valid_corpus(self):
-        # Fault T4: the shifts test wrongly expects a logical >>. Making the
-        # compiler emit srl passes every visible test but breaks valid programs.
-        fw = FaultWorkspace("T4", {"compiler"})
-        fw.edit("minilang/compiler.py", '"<<": "sll", ">>": "sra"', '"<<": "sll", ">>": "srl"')
+        # Fault T2: the overflow test wrongly expects unbounded integers.
+        # Removing wraparound from the NPU simulator passes every visible
+        # test but breaks valid programs.
+        fw = FaultWorkspace("T2", {"simulator"})
+        fw.edit("npu/simulator.py", "spad[sp(base + i)] = s32(v)", "spad[sp(base + i)] = v")
         rep = fw.verify()
         fw.close()
         self.assertEqual(rep.failing_tests, [])
         self.assertLess(rep.valid[0], rep.valid[1])
 
     def test_test_edit_must_match_reference(self):
-        # Fault S3 (floor division in the simulator): editing the test to the
-        # buggy output passes the visible tests but violates P4.
-        fw = FaultWorkspace("S3", {"tests"})
-        fw.edit("tests/division.expected", "-3\n-1\n-3\n1\n3\n-1\n", "-4\n1\n-4\n-1\n3\n-1\n")
+        # Fault L3 (relu fused into a value with other uses): editing the test
+        # to the buggy output passes the visible tests but violates P4.
+        fw = FaultWorkspace("L3", {"tests"})
+        fw.edit("tests/fusion_uses.expected", "-5 -5\n10 12\n0 0\n", "0 0\n10 12\n0 0\n")
         rep = fw.verify()
         fw.close()
         check = {c.name: c for c in rep.checks}["test_edits"]
@@ -107,23 +107,25 @@ class WrongFixTest(unittest.TestCase):
 
     def test_correct_test_fix_is_accepted(self):
         fw = FaultWorkspace("T1", {"tests"})
-        fw.edit("tests/division.expected", "-4\n1\n-4\n-1\n3\n-1\n", "-3\n-1\n-3\n1\n3\n-1\n")
+        fw.edit("tests/dense_layer.expected",
+                "3 -20 0 7 -1\n3 -20 0 7 -1\n13 -12 3 9 -1\n25 0 9 15 17\n7 46 85\n7 46 85\n-71 -9 53\n",
+                "0 0 0 0 0\n1 0 0 3 0\n13 0 3 9 0\n25 0 9 15 17\n-50 0 50\n-47 7 61\n-101 -26 49\n")
         rep = fw.verify()
         fw.close()
         self.assertTrue(rep.passed, rep.feedback())
 
     def test_special_case_for_a_test_is_caught(self):
         fw = FaultWorkspace(None, {"compiler"})
-        fw.edit("minilang/compiler.py", "MASK32 = 0xFFFFFFFF\n",
-                "MASK32 = 0xFFFFFFFF\nSKIP = 'tests/deep_expr.ml'\n")
+        fw.edit("minilang/compiler.py", "STAGES = [\"frontend\"] + [name for name, _ in PIPELINE]\n",
+                "STAGES = [\"frontend\"] + [name for name, _ in PIPELINE]\nSKIP = 'tests/reuse.ml'\n")
         rep = fw.verify()
         fw.close()
         self.assertFalse({c.name: c for c in rep.checks}["no_test_special_cases"].passed)
 
     def test_test_program_change_and_deletion_are_caught(self):
         fw = FaultWorkspace(None, {"tests"})
-        fw.edit("tests/arith.ml", "var b = 5;", "var b = 6;")
-        (fw.ws.dir / "tests" / "sra.s").unlink()
+        fw.edit("tests/elementwise.ml", "v = tensor([4, -5, 6])", "v = tensor([4, -5, 7])")
+        (fw.ws.dir / "tests" / "npu_mma.npu").unlink()
         rep = fw.verify()
         fw.close()
         checks = {c.name: c for c in rep.checks}
@@ -133,7 +135,7 @@ class WrongFixTest(unittest.TestCase):
 
     def test_unassigned_layer_and_protected_file_are_caught(self):
         fw = FaultWorkspace(None, {"compiler"})
-        fw.edit("t32/simulator.py", "def s32(value: int) -> int:", "def s32(value: int) -> int:  # x")
+        fw.edit("npu/simulator.py", "class _Trap(Exception):", "class _Trap(Exception):  # x")
         fw.edit("spec.md", "single source of truth", "source of truth")
         rep = fw.verify()
         fw.close()

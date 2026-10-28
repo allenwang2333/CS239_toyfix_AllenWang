@@ -12,15 +12,23 @@ It is built to answer one research question:
 The system under repair is a small but complete toolchain that we wrote for
 this project:
 
-- **T32**, a toy 32-bit instruction set (30 instructions, 16 registers,
-  separate code and data memory), with an assembler and an instruction-level
-  simulator.
-- **Hardware profiles** (`t32-base`, `t32-tiny`, `t32-wide`) that limit
-  register count, immediate width, branch and jump range, memory size, and the
-  presence of a multiplier. A validator checks programs against a profile.
-- **MiniLang**, a small imperative language, with a compiler to T32. The
-  compiler must handle large constants (`lui`/`addi`), register spills, long
-  branches (branch relaxation), large data addresses, and software multiply.
+- **NPU**, a small tile-based AI accelerator (9 instructions: strided DMA
+  `load`/`store`, a matrix unit `mm`/`mma`, vector `vadd`/`vsub`/`vmul`/`vrelu`,
+  and `out`), with an assembler and a simulator.
+- **Hardware profiles** (`npu-tiny`, `npu-base`, `npu-wide`) that set the
+  shape of the matrix unit (`mm_shape`, for example 8 x 16 x 4), the vector
+  length, the presence of `mma`, the width of the DMA row stride, the DMA
+  address alignment, and the scratchpad and DRAM sizes. A validator checks
+  programs against a profile.
+- **MiniLang**, a small tensor language with Python syntax, with a compiler to
+  the NPU. The compiler has an MLIR-style middle end (an `ml` tensor dialect,
+  canonicalization, matmul + bias + relu fusion, bufferization to strided
+  views with buffer reuse, and tiling into an `npu` dialect). It must obey
+  every profile limit: it splits vector work into `vlen` pieces, accumulates
+  with `mm` and `vadd` when there is no `mma`, splits DMA transfers whose row
+  stride is too long, and pads rows to `dma_align`. It must also handle
+  shapes that are not multiples of the matrix unit, large matrix products,
+  transposed and broadcast operands, and values with more than one use.
 - A **reference interpreter** for MiniLang, used as the oracle.
 - A **specification** (`spec.md`) that defines all behavior, including which
   programs are valid and which programs the compiler must accept.
@@ -28,9 +36,9 @@ this project:
 A Fault Injector puts one or two bugs into a copy of the toolchain. The bugs
 come from a catalog of 22 faults in four layers: wrong test expectations,
 wrong hardware-constraint checks, wrong compiler lowering, and wrong simulator
-semantics. Each fault has a "tempting" wrong fix. Examples: rejecting large
-constants instead of fixing the constant split, or editing a test instead of
-fixing the simulator.
+semantics. Each fault has a "tempting" wrong fix. Examples: rejecting
+shapes that are not multiples of the matrix unit instead of fixing the edge tiles,
+or editing a test instead of fixing the simulator.
 
 The agents then work like a small engineering team. A Test Runner reports the
 failures. A Diagnoser finds the faulty layer. The Coordinator assigns that

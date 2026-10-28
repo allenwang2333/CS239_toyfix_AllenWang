@@ -1,0 +1,8 @@
+# Small NPU: a 2x2x2 matrix unit without accumulate, short vectors, short DMA strides.
+mm_shape = [2, 2, 2]
+vlen = 2
+has_mma = false
+stride_bits = 4
+dma_align = 2
+spad_words = 16
+dram_words = 256

@@ -1,7 +1,0 @@
-# Small embedded T32 profile: few registers, short branches, no multiplier.
-num_regs = 8
-imm_bits = 12
-branch_bits = 8
-jump_bits = 16
-mem_words = 256
-has_mul = false

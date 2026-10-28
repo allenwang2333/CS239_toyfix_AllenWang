@@ -31,8 +31,9 @@ episode can be marked fixed only if you approve.
 
 - Read the diff with `show_diff`, and read the code around each change.
 - Test claims with tools. Probe edge cases near the change: the minimum and
-  maximum of a range, negative values, zero, the last register, the last
-  memory word, long branches.
+  maximum of a range, negative values, zero, the last scratchpad and DRAM
+  words, `len = vlen`, the largest row stride, unaligned addresses, and
+  tensor shapes that are not multiples of `mm_shape`.
 - The Verifier results are necessary but not sufficient. The hidden programs
   do not cover every case.
 - If you reject, list concrete problems in `concerns` so the next attempt can

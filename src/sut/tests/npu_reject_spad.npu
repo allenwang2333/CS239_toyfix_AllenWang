@@ -1,0 +1,4 @@
+; machine: npu-tiny
+; The scratchpad range 13 .. 16 is outside spad_words = 16 (spec §4.4(g)).
+.data 4
+  load 13, 0, 2, 2, 2, 1

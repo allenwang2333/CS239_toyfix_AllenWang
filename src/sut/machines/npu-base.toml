@@ -1,0 +1,8 @@
+# General-purpose NPU: a 4x4x4 matrix unit with accumulate.
+mm_shape = [4, 4, 4]
+vlen = 8
+has_mma = true
+stride_bits = 8
+dma_align = 4
+spad_words = 64
+dram_words = 4096

@@ -80,11 +80,13 @@ def _list(desc: str) -> dict:
 SOURCE_PARAMS = {
     "source": _str("Program text. Give either source or path."),
     "path": _str("Workspace-relative path of a program, e.g. tests/arith.ml."),
-    "kind": _str("Program language. Default: from the path suffix, else minilang.",
-                 ["minilang", "asm"]),
-    "machine": _str("Hardware profile, e.g. t32-base, t32-tiny, t32-wide. "
-                    "Default: the '// machine:' header, else t32-base."),
+    "kind": _str("Program language: minilang (.ml) or npu (NPU assembly, .npu). "
+                 "Default: from the path suffix, else minilang.", ["minilang", "npu"]),
+    "machine": _str("Hardware profile: npu-base, npu-tiny, or npu-wide. "
+                    "Default: the 'machine:' header, else npu-base."),
 }
+
+COMPILER_STAGES = ["frontend", "canonicalize", "fuse", "bufferize", "lower-npu", "asm"]
 
 
 def _program_file(ctx: EpisodeContext, args: dict) -> tuple[str, list[str]]:
@@ -97,8 +99,8 @@ def _program_file(ctx: EpisodeContext, args: dict) -> tuple[str, list[str]]:
             raise ToolDenied("P7", str(e)) from None
         if not path.is_file():
             raise ToolError(f"no such file: {rel}")
-        if path.suffix not in (".ml", ".s"):
-            raise ToolError("path must be a .ml or .s file")
+        if path.suffix not in (".ml", ".npu"):
+            raise ToolError("path must be a .ml or .npu file")
         return str(path), extra
     if not args.get("source"):
         raise ToolError("give either source or path")
@@ -217,8 +219,14 @@ def compile_program(ctx, args):
     file, extra = _program_file(ctx, args | {"kind": "minilang"})
     if not file.endswith(".ml"):
         raise ToolError("compile_program needs a MiniLang program")
-    res = _sut(ctx, "compile", file, *extra)
-    return res["asm"] if res.get("ok") else f"compile error: {res.get('detail')}"
+    stage = args.get("stage") or "asm"
+    if stage not in COMPILER_STAGES:
+        raise ToolError(f"stage must be one of {COMPILER_STAGES}")
+    if stage == "asm":
+        res = _sut(ctx, "compile", file, *extra)
+        return res["asm"] if res.get("ok") else f"compile error: {res.get('detail')}"
+    res = _sut(ctx, "ir", file, *extra, "--stage", stage)
+    return res["ir"] if res.get("ok") else f"compile error: {res.get('detail')}"
 
 
 def validate_program(ctx, args):
@@ -373,12 +381,15 @@ TOOLS: dict[str, Tool] = {t.name: t for t in [
     Tool("run_program", "Compile (MiniLang), assemble, validate, and run a program. "
          "Returns the stage reached, the result text, and details.",
          SOURCE_PARAMS | {"max_steps": _int("Step limit. Default 200000.")}, [], READERS, run_program),
-    Tool("compile_program", "Compile a MiniLang program and return the T32 assembly.",
-         {k: SOURCE_PARAMS[k] for k in ("source", "path", "machine")}, [], READERS, compile_program),
+    Tool("compile_program", "Compile a MiniLang program and return the NPU assembly, or the "
+         "MLIR-style IR after one compiler stage.",
+         {k: SOURCE_PARAMS[k] for k in ("source", "path", "machine")}
+         | {"stage": _str("Compiler stage to show. Default: asm.", COMPILER_STAGES)},
+         [], READERS, compile_program),
     Tool("validate_program", "Assemble (and compile, for MiniLang) a program and list the "
          "hardware-profile violations.", SOURCE_PARAMS, [], READERS, validate_program),
     Tool("trace_execution", "Run a program and return a per-instruction trace "
-         "(pc, instruction, changed registers and memory).",
+         "(pc, instruction, and the words that it wrote).",
          SOURCE_PARAMS | {"start_step": _int("First step to trace. Default 0."),
                           "limit": _int("Number of steps, at most 200. Default 60.")},
          [], READERS, trace_execution),

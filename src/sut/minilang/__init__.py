@@ -1,1 +1,1 @@
-"""MiniLang: a small imperative language compiled to T32."""
+"""MiniLang: a small tensor language with Python syntax, compiled to the NPU."""

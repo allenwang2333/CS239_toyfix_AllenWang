@@ -1,0 +1,2 @@
+; machine: npu-wide
+vrelu 0, 0, 65

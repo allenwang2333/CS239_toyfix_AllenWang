@@ -1,0 +1,4 @@
+; machine: npu-base
+; The DRAM address 2 is not a multiple of dma_align = 4 (spec §4.4(f)).
+.data 8
+  load 0, 2, 1, 2, 0, 1

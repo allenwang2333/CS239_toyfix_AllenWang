@@ -1,0 +1,2 @@
+; machine: npu-tiny
+mm 13, 0, 4, 2, 2, 2

@@ -10,14 +10,14 @@ PROMPTS_DIR = PKG_DIR / "prompts"
 # Layer name -> workspace-relative files or directory prefixes (ending in "/").
 LAYERS: dict[str, list[str]] = {
     "tests": ["tests/"],
-    "constraints": ["t32/validator.py"],
-    "compiler": ["minilang/compiler.py"],
-    "simulator": ["t32/isa.py", "t32/assembler.py", "t32/simulator.py"],
+    "constraints": ["npu/validator.py"],
+    "compiler": ["minilang/compiler.py", "minilang/ir.py", "minilang/passes.py"],
+    "simulator": ["npu/isa.py", "npu/assembler.py", "npu/simulator.py"],
 }
 
 # Files that no agent may modify (policy P3).
 PROTECTED: list[str] = [
-    "spec.md", "machines/", "cli.py", "t32/machine.py", "t32/__init__.py",
+    "spec.md", "machines/", "cli.py", "npu/machine.py", "npu/__init__.py",
     "minilang/parser.py", "minilang/reference.py", "minilang/__init__.py",
 ]
 

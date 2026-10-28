@@ -1,0 +1,9 @@
+; machine: npu-tiny
+; The largest vector length, len = vlen = 2, is valid (spec §4.4(d)).
+.data 2
+.word 0, 7, -9
+  load 0, 0, 1, 2, 0, 1
+  vadd 2, 0, 0, 2           ; 14 -18
+  vrelu 4, 2, 2             ; 14 0
+  store 0, 4, 1, 2, 0
+  out 0, 1, 2, 0, 1

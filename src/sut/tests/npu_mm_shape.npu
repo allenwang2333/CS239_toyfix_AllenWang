@@ -1,0 +1,11 @@
+; machine: npu-wide
+; The matrix unit of npu-wide is 8 x 16 x 4 (m x k x n). The largest product is valid.
+.data 40
+.word 0, 1
+.word 4, 2
+  load 0, 0, 8, 16, 0, 0    ; A: 8 x 16, every element 1
+  load 128, 4, 16, 4, 0, 0  ; B: 16 x 4, every element 2
+  mm 192, 0, 128, 8, 16, 4  ; every element 32
+  store 8, 192, 8, 4, 4     ; DRAM 8 .. 39
+  out 8, 1, 4, 0, 1
+  out 36, 1, 4, 0, 1

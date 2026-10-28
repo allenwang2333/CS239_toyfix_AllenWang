@@ -1,9 +1,9 @@
-// machine: t32-base
-// 32-bit wraparound.
-var big = 2147483647;
-print big + 1;
-var neg = -5;
-print neg + -3;
-print 0 - 2147483647 - 2;
-print 65536 * 65536;
-print 4294967295;
+# machine: npu-wide
+# 32-bit wraparound in elementwise operations and in matrix products (spec §8.2).
+def main():
+    big = tensor([[2147483647, 2147483646], [-2147483648, 65536]])
+    print(big + 1)
+    print(big * big)
+    m = tensor([[65536, 65536, 3]])
+    print(m @ m.T)
+    print(-tensor([-2147483648, 2147483647, -5]))

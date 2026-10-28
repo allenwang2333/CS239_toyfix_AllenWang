@@ -24,28 +24,27 @@ class ToolPolicyTest(unittest.TestCase):
         for role in ("diagnoser", "reviewer"):
             names = {t.name for t in tools_for(role, self.ctx)}
             self.assertNotIn("edit_file", names)
-            r = self.call(role, "edit_file", path="t32/validator.py", old_text="a", new_text="b")
+            r = self.call(role, "edit_file", path="npu/validator.py", old_text="a", new_text="b")
             self.assertTrue(r.denied)
             self.assertIn("P1", r.text)
         self.assertEqual(self.ctx.ws.changes(self.ctx.ws.baseline), {})
 
     def test_p2_repair_edits_only_the_assigned_layer(self):
         self.ctx.assigned_layers = {"compiler"}
-        r = self.call("repair", "edit_file", path="t32/validator.py",
-                      old_text="if program.data_words >= machine.mem_words:",
-                      new_text="if program.data_words > machine.mem_words:")
+        r = self.call("repair", "edit_file", path="npu/validator.py",
+                      old_text="if v >= stride_limit - 1:", new_text="if v >= stride_limit:")
         self.assertTrue(r.denied)
         self.assertIn("P2", r.text)
         self.ctx.assigned_layers = {"constraints"}
-        r = self.call("repair", "edit_file", path="t32/validator.py",
-                      old_text="if program.data_words >= machine.mem_words:",
-                      new_text="if program.data_words > machine.mem_words:")
+        r = self.call("repair", "edit_file", path="npu/validator.py",
+                      old_text="if v >= stride_limit - 1:", new_text="if v >= stride_limit:")
         self.assertTrue(r.ok, r.text)
-        self.assertEqual(self.ctx.ws.changes(self.ctx.ws.baseline), {"t32/validator.py": "modified"})
+        self.assertEqual(self.ctx.ws.changes(self.ctx.ws.baseline), {"npu/validator.py": "modified"})
 
     def test_p3_protected_files(self):
         self.ctx.assigned_layers = {"tests", "constraints", "compiler", "simulator"}
-        for path in ("spec.md", "machines/t32-tiny.toml", "minilang/reference.py", "cli.py"):
+        for path in ("spec.md", "machines/npu-tiny.toml", "minilang/reference.py", "cli.py",
+                     "minilang/parser.py", "npu/machine.py"):
             r = self.call("repair", "edit_file", path=path, old_text="a", new_text="b")
             self.assertTrue(r.denied, path)
             self.assertIn("P3", r.text)
@@ -56,8 +55,8 @@ class ToolPolicyTest(unittest.TestCase):
         self.assertTrue(r.denied)
 
     def test_p7_paths_stay_inside_the_workspace(self):
-        for path in ("../baseline/t32/validator.py", "/etc/passwd",
-                     "../../toyfix/hidden/corpus/valid/imm_min.s", "../scoreboard/fault.json"):
+        for path in ("../baseline/npu/validator.py", "/etc/passwd",
+                     "../../toyfix/hidden/corpus/valid/mlp_tiny.ml", "../scoreboard/fault.json"):
             r = self.call("diagnoser", "read_file", path=path)
             self.assertTrue(r.denied, path)
             self.assertIn("P7", r.text)
@@ -88,19 +87,24 @@ class ToolPolicyTest(unittest.TestCase):
 
     def test_read_and_run_tools(self):
         self.assertIn("4.4. A program is **valid**", self.call("diagnoser", "read_spec", section="4.4").text)
-        r = self.call("diagnoser", "run_tests", filter="full_memory")
+        r = self.call("diagnoser", "run_tests", filter="npu_stride_max")
         self.assertIn("0/1 visible tests passed", r.text)
-        r = self.call("diagnoser", "validate_program", path="tests/full_memory.s")
-        self.assertIn("data_words=256", r.text)
-        r = self.call("diagnoser", "run_program", source="print 2 + 3;")
+        r = self.call("diagnoser", "validate_program", path="tests/npu_stride_max.npu")
+        self.assertIn("rstride=15 does not fit stride_bits=4", r.text)
+        r = self.call("diagnoser", "run_program", source="def main():\n    print(2 + 3)\n")
         self.assertIn('"actual": "5"', r.text)
-        r = self.call("diagnoser", "trace_execution", source="addi r1, r0, 4\nout r1\nhalt",
-                      kind="asm", limit=5)
-        self.assertIn("r1=4", r.text)
-        r = self.call("diagnoser", "reference_eval", source="print -7 / 2;")
-        self.assertEqual(r.text.strip(), "-3")
-        r = self.call("diagnoser", "search_code", pattern="mem_words")
-        self.assertIn("t32/validator.py", r.text)
+        r = self.call("diagnoser", "compile_program", stage="fuse",
+                      source="def main():\n    x = iota((2, 2))\n    print(relu(x @ x + 1))\n")
+        self.assertIn('"ml.linear"', r.text)
+        r = self.call("diagnoser", "run_program", path="tests/npu_mma.npu")
+        self.assertIn('"stage": "run"', r.text)
+        r = self.call("diagnoser", "trace_execution", kind="npu", limit=5,
+                      source=".data 1\n.word 0, 4\nload 0, 0, 1, 1, 0, 0\nout 0, 1, 1, 0, 0\n")
+        self.assertIn("spad[0..0] = 4", r.text)
+        r = self.call("diagnoser", "reference_eval", source="def main():\n    print(tensor([7, -7]) * -2)\n")
+        self.assertEqual(r.text.strip(), "-14 14")
+        r = self.call("diagnoser", "search_code", pattern="spad_words")
+        self.assertIn("npu/validator.py", r.text)
 
     def test_submit_validation(self):
         r = self.call("diagnoser", "submit_diagnosis", layer="spec", root_cause="x", evidence="y")

@@ -117,7 +117,8 @@ class Workspace:
         """Write an ad-hoc program for the toolchain CLI."""
         d = self.dir / ".scratch"
         d.mkdir(exist_ok=True)
-        path = d / f"{uuid.uuid4().hex[:8]}.{'ml' if kind == 'minilang' else 's'}"
+        suffix = "ml" if kind == "minilang" else "npu"
+        path = d / f"{uuid.uuid4().hex[:8]}.{suffix}"
         path.write_text(text)
         return path
 

@@ -1,0 +1,8 @@
+; machine: npu-base
+.data 260
+.word 0, 5
+.word 255, 9
+  load 0, 0, 2, 1, 255, 0
+  vmul 0, 0, 0, 2
+  store 4, 0, 2, 1, 252
+  out 4, 2, 1, 252, 0
