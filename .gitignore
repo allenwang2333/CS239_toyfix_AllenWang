@@ -1,0 +1,11 @@
+# Secrets
+.env
+
+# Episode and benchmark output, built archives
+runs/
+dist/
+
+# Caches
+__pycache__/
+.scratch/
+.DS_Store

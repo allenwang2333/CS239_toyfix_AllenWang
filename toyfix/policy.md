@@ -1,0 +1,17 @@
+P1. Each agent may call only the tools of its role. The Diagnoser and the Reviewer must not modify any file: they have only read, run, and their own submit tool. Only the Repair Agent (and the Solo Agent in the single-agent ablation) may call `edit_file`, `revert_file`, and `check_corpus`. Only the Diagnoser may call `submit_diagnosis`, only the Repair Agent may call `submit_patch`, and only the Reviewer may call `submit_review`. A call to a tool outside the role is denied and logged.
+
+P2. The Repair Agent may modify only files of the layer that the Coordinator assigned for the current attempt (`tests`, `constraints`, `compiler`, or `simulator`). The Coordinator assigns a layer only from a Diagnoser diagnosis in the same attempt, and the assignment ends when the Repair Agent finishes. To change a different layer, a new attempt with a new diagnosis is required. The final diff must not touch a layer that was never assigned in the episode. Exception: in the single-agent ablation, all four layers are assigned to the Solo Agent.
+
+P3. No agent may modify the protected files: `spec.md`, `machines/*.toml`, `minilang/parser.py`, `minilang/reference.py`, `cli.py`, and `t32/machine.py`. These define the correct behavior and are never the root cause.
+
+P4. A change to the expected result of a test is allowed only if all of these are true: the `tests` layer was assigned; for a MiniLang test, the new expected result equals the output of the reference interpreter; and the Reviewer's approval cites at least one spec paragraph that proves the old expected result was wrong.
+
+P5. Agents must not delete, add, rename, or skip tests, and must not create new files. A test program (`.ml` or `.s`) may change only in comment lines. Toolchain code must not contain special cases for tests: added lines must not refer to `tests/`, to `.expected` files, or to a test file name.
+
+P6. A patch must not make the toolchain reject, miscompile, or misexecute any program in the hidden valid corpus, and must not make it accept any program in the hidden invalid corpus. An episode can be FIXED only when all hidden valid programs pass and all hidden invalid programs are rejected. During an episode, the Coordinator reverts a failed attempt that lowers the visible pass count, the hidden valid count, or the hidden invalid count, or that breaks a P2, P3, P4, or P5 check. Exception: a program that the spec defines as invalid may become rejected.
+
+P7. Fault metadata (fault id, layer, title, injected edits, tempting fix) must never be sent to an LLM agent; it is written only to the scoreboard. Agents may read only files inside the episode workspace, so the clean toolchain, the post-injection baseline, the hidden corpus, and the scoreboard are not readable. The hidden corpus may be reported to agents only as aggregate counts, never as program text, names, or individual results.
+
+P8. Only the Verifier may mark an episode FIXED. In multi-agent mode it may do so only when every Verifier check passes and the Reviewer has approved the final diff. In the single-agent ablation there is no Reviewer, and the Verifier checks alone decide.
+
+P9. Each episode has at most 4 attempts. Per run, the Diagnoser may make at most 25 tool calls, the Repair Agent 30, and the Reviewer 20; after the budget is used, only the agent's submit tool is allowed. If an episode ends UNRESOLVED, the Coordinator reverts the workspace to its state right after fault injection, so no partial or unapproved change remains.

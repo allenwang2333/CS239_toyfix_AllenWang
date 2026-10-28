@@ -1,0 +1,7 @@
+# General-purpose T32 profile.
+num_regs = 16
+imm_bits = 12
+branch_bits = 12
+jump_bits = 22
+mem_words = 4096
+has_mul = true
