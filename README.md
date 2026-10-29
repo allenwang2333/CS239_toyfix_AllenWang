@@ -58,6 +58,55 @@ This repository contains all required deliverables for **Phase 1: Prototype**:
 - **Verifier** (Rule-Based): Objective gatekeeper checking scope, visible tests, and the hidden test corpus (29 valid, 15 invalid programs).
 - **Reviewer** (LLM, Read-Only): Inspects the unified diff against `spec.md` to guarantee no valid programs are restricted and no invalid programs are admitted.
 
+### Architectural Layers (Repair Layers)
+
+ToyFix partitions the SUT toolchain into four repair layers. The Coordinator assigns exactly one layer to the Repair Agent per attempt (Policy P2). The Repair Agent can edit files only in that assigned layer.
+
+```
++-----------------------------------------------------------------------------------------+
+|                               Toolchain Execution Pipeline                              |
+|                                                                                         |
+|   MiniLang Source (.ml)                                                                 |
+|         |                                                                               |
+|         v                                                                               |
+|   [ Compiler Layer ]       minilang/compiler.py, ir.py, passes.py                       |
+|         |                  Translates AST -> IR -> optimizations -> NPU assembly        |
+|         v                                                                               |
+|   NPU Assembly (.npu)                                                                   |
+|         |                                                                               |
+|         v                                                                               |
+|   [ Constraints Layer ]    npu/validator.py                                             |
+|         |                  Validates assembly against hardware profiles (machines/*.toml)|
+|         v                                                                               |
+|   [ Simulator Layer ]      npu/isa.py, assembler.py, simulator.py                       |
+|         |                  Simulates NPU instructions, scratchpad memory, and DRAM      |
+|         v                                                                               |
+|   Execution Output <=====  [ Tests Layer ]  tests/ (*.ml, *.npu, *.expected)            |
++-----------------------------------------------------------------------------------------+
+```
+
+| Layer | Files Owned | Responsibilities | Common Defect Patterns |
+|---|---|---|---|
+| **`tests`** | `tests/` (`*.ml`, `*.npu`, `*.expected`) | Defines visible end-to-end test cases and expected program outputs. | Stale or incorrect `.expected` files where compiler and simulator behavior is correct per `spec.md` (e.g., Fault T3). |
+| **`constraints`** | `npu/validator.py` | Statically checks NPU assembly against target hardware profile limits (`machines/*.toml`): matrix multiply shapes (`mm_shape`), vector length (`vlen`), scratchpad capacity, memory alignment, and DMA stride limits. | Off-by-one boundary checks, overly tight stride limits, or wrong alignment checks that falsely reject legal programs (e.g., Faults C1–C4). |
+| **`compiler`** | `minilang/compiler.py`<br>`minilang/ir.py`<br>`minilang/passes.py` | Parses Python AST into MLIR-style intermediate representation (IR), runs optimization passes (`canonicalize`, `fuse`), manages scratchpad buffer allocation (`bufferize`), tiles loops, and emits NPU assembly (`lower-npu`). | Erroneous fusion of multi-use values, premature buffer reuse that clobbers live operands, or incorrect loop tiling math (e.g., Faults L1–L4). |
+| **`simulator`** | `npu/isa.py`<br>`npu/assembler.py`<br>`npu/simulator.py` | Assembles and encodes the 9 NPU instructions (`load`, `store`, `mm`, `mma`, `vadd`, `vsub`, `vmul`, `vrelu`, `out`). Simulates hardware execution and models DRAM and scratchpad memory state. | Arithmetic execution errors (e.g., inverted operand order in `vsub`, accumulator clobbering in `mma`, unhandled boundary elements in `vrelu`). |
+
+#### Protected System Components (Policy P3)
+
+The following components represent immutable ground truth. No agent may edit these files regardless of role or assigned layer:
+- `spec.md`: The definitive system specification and ground truth.
+- `machines/*.toml`: Hardware target definitions (`npu-tiny`, `npu-base`, `npu-wide`).
+- `minilang/parser.py`: MiniLang frontend grammar parser.
+- `minilang/reference.py`: Authoritative reference interpreter oracle.
+- `cli.py` & `npu/machine.py`: Toolchain CLI interface and machine profile dataclass.
+
+#### Why Layer Isolation Matters
+
+A naive LLM agent often applies a "wrong-layer workaround" — such as editing a test expectation to match buggy compiler output, or loosening a hardware validator to accept illegal assembly. ToyFix prevents these unsound fixes through structural layer isolation:
+1. **Evidence-based Diagnosis**: The Diagnoser must prove which layer holds the root cause.
+2. **Strict Scoping (Policy P2)**: The Repair Agent cannot touch files outside its assigned layer.
+3. **Dual Verification (Policy P6)**: The Verifier evaluates both hidden valid and hidden invalid test programs to ensure the patch does not over-restrict or under-restrict system behavior.
 ---
 
 ## Quickstart
