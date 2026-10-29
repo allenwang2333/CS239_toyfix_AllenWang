@@ -63,6 +63,13 @@ def main() -> None:
         n2 = _add(tar, _files(ROOT / "src"), ROOT / "src", "src", secrets)
         n2 += _add(tar, _files(ROOT / "tests"), ROOT / "tests", "tests", secrets)
         n2 += _add(tar, _files(req), req, APP, secrets)
+        if (ROOT / "traces").is_dir():
+            n2 += _add(tar, _files(ROOT / "traces"), ROOT / "traces", "traces", secrets)
+        for doc in ("README.md", "DEMO.md", "requirements.md", "policies.md"):
+            p = ROOT / doc
+            if p.is_file():
+                tar.add(p, arcname=doc)
+                n2 += 1
     print(f"{path1} ({n1} files)\n{path2} ({n2} files)")
 
 
