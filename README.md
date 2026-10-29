@@ -171,11 +171,15 @@ See [`traces/README.md`](traces/README.md) for full walkthroughs:
 ---
 
 ## Demo & Presentation
-
 ## Demo & Presentation
 
 For demo presentation:
 - **Offline Check**: `cd src && python3 -m toyfix check` (verifies clean toolchain and all 22 catalog faults in <1s).
 - **Live Episode**: `cd src && python3 -m toyfix episode C2` (demonstrates end-to-end multi-agent repair in ~90s).
 - **Policy Enforcement**: Examine `traces/scenario4_policy_violation_P2_P6.md` for policy P2 denial and policy P6 rollback.
-- Fast live demo cheat sheet for class presentation.
+
+---
+
+## License
+
+This project is licensed under the MIT License. See [`LICENSE`](LICENSE) for details.
