@@ -16,7 +16,6 @@ This repository contains all required deliverables for **Phase 1: Prototype**:
 | **Policies Document** | [`policies.md`](policies.md) | Specifies what the system must never do: permission, capability, lifecycle, information flow, and isolation boundaries. |
 | **Agent Traces** | [`traces/`](traces/) | Complete agentic traces (thoughts, actions, inter-agent messages, observations) in Markdown and JSONL formats. |
 | **Traces Explanation** | [`traces/README.md`](traces/README.md) | Explains each scenario, failure mechanics, and specific policies triggered or enforced. |
-| **Demo Script & Guide** | [`DEMO.md`](DEMO.md) | 5-minute video recording script (YouTube submission) and step-by-step live demo walkthrough for class presentation. |
 | **Source Code** | [`src/`](src/) | Phase 1 multi-agent application code, SUT toolchain, and fault catalog. |
 | **Test Suite** | [`tests/`](tests/) | 67 offline unit and regression tests covering ISA, compiler passes, policies, and scripted episodes. |
 
@@ -173,6 +172,10 @@ See [`traces/README.md`](traces/README.md) for full walkthroughs:
 
 ## Demo & Presentation
 
-See [`DEMO.md`](DEMO.md) for:
-- 5-minute video presentation script and storyboard for YouTube submission.
+## Demo & Presentation
+
+For demo presentation:
+- **Offline Check**: `cd src && python3 -m toyfix check` (verifies clean toolchain and all 22 catalog faults in <1s).
+- **Live Episode**: `cd src && python3 -m toyfix episode C2` (demonstrates end-to-end multi-agent repair in ~90s).
+- **Policy Enforcement**: Examine `traces/scenario4_policy_violation_P2_P6.md` for policy P2 denial and policy P6 rollback.
 - Fast live demo cheat sheet for class presentation.

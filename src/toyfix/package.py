@@ -65,7 +65,7 @@ def main() -> None:
         n2 += _add(tar, _files(req), req, APP, secrets)
         if (ROOT / "traces").is_dir():
             n2 += _add(tar, _files(ROOT / "traces"), ROOT / "traces", "traces", secrets)
-        for doc in ("README.md", "DEMO.md", "requirements.md", "policies.md"):
+        for doc in ("README.md", "requirements.md", "policies.md"):
             p = ROOT / doc
             if p.is_file():
                 tar.add(p, arcname=doc)
